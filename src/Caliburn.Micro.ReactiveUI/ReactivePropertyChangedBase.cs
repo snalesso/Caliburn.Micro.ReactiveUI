@@ -15,7 +15,7 @@ namespace Caliburn.Micro.ReactiveUI
         /// </summary>
         public virtual bool IsNotifying
         {
-            get { return AreChangeNotificationsEnabled(); }
+            get { return this.AreChangeNotificationsEnabled(); }
             set { throw new NotSupportedException(); }
         }
 
@@ -26,7 +26,7 @@ namespace Caliburn.Micro.ReactiveUI
         /// <param name = "property">The property expression.</param>
         public virtual void NotifyOfPropertyChange<TProperty>(Expression<Func<TProperty>> property)
         {
-            NotifyOfPropertyChange(property.GetMemberInfo().Name);
+            this.NotifyOfPropertyChange(property.GetMemberInfo().Name);
         }
 
         /// <summary>
@@ -43,7 +43,7 @@ namespace Caliburn.Micro.ReactiveUI
         /// </summary>
         public virtual void Refresh()
         {
-            NotifyOfPropertyChange(string.Empty);
+            this.NotifyOfPropertyChange(string.Empty);
         }
     }
 }

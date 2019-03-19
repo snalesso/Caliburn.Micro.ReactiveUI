@@ -1,6 +1,7 @@
 ﻿using ReactiveUI;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 
@@ -18,49 +19,71 @@ namespace Caliburn.Micro.ReactiveUI
             /// </summary>
             public class OneActive : ReactiveConductorBaseWithActiveItem<T>
             {
-                readonly ReactiveObservableCollection<T> items = new ReactiveObservableCollection<T>();
+                //readonly SourceList<T> _items = new SourceList<T>();
+                private readonly ObservableCollection<T> _items = new ObservableCollection<T>();
 
                 /// <summary>
                 /// Initializes a new instance of the <see cref="Conductor&lt;T&gt;.Collection.OneActive"/> class.
                 /// </summary>
                 public OneActive()
                 {
-                    items.CollectionChanged += (s, e) =>
-                    {
-                        switch (e.Action)
-                        {
-                            case NotifyCollectionChangedAction.Add:
-                                e.NewItems.OfType<IChild>().Apply(x => x.Parent = this);
-                                break;
-                            case NotifyCollectionChangedAction.Remove:
-                                e.OldItems.OfType<IChild>().Apply(x => x.Parent = null);
-                                break;
-                            case NotifyCollectionChangedAction.Replace:
-                                e.NewItems.OfType<IChild>().Apply(x => x.Parent = this);
-                                e.OldItems.OfType<IChild>().Apply(x => x.Parent = null);
-                                break;
-                            case NotifyCollectionChangedAction.Reset:
-                                items.OfType<IChild>().Apply(x => x.Parent = this);
-                                break;
-                        }
-                    };
+                    //this._items.Connect().ForEachItemChange((e) =>
+                    //{
+                    //    if (!(e.Current is IChild child))
+                    //        return;
+
+                    //    switch (e.Reason)
+                    //    {
+                    //        case ListChangeReason.Add:
+                    //        case ListChangeReason.AddRange:
+                    //            child.Parent = this;
+                    //            break;
+                    //        case ListChangeReason.Remove:
+                    //        case ListChangeReason.RemoveRange:
+                    //            child.Parent = null;
+                    //            break;
+                    //        case ListChangeReason.Replace:
+                    //            child.Parent = null;
+                    //            var newChild = e.Previous as IChild;
+                    //            if (newChild != null)
+                    //                newChild.Parent = this;
+                    //            break;
+                    //        case ListChangeReason.Refresh:
+                    //            this._items.Items.OfType<IChild>().Apply(x => x.Parent = this);
+                    //            break;
+                    //        case ListChangeReason.Clear:
+                    //            this._items.Items.OfType<IChild>().Apply(x => x.Parent = null);
+                    //            break;
+                    //    }
+                    //});
+
+                    this.Items = new ReadOnlyObservableCollection<T>(this._items);
+
+                    this._items.CollectionChanged += (s, e) =>
+                     {
+                         switch (e.Action)
+                         {
+                             case NotifyCollectionChangedAction.Add:
+                                 e.NewItems.OfType<IChild>().Apply(x => x.Parent = this);
+                                 break;
+                             case NotifyCollectionChangedAction.Remove:
+                                 e.OldItems.OfType<IChild>().Apply(x => x.Parent = null);
+                                 break;
+                             case NotifyCollectionChangedAction.Replace:
+                                 e.NewItems.OfType<IChild>().Apply(x => x.Parent = this);
+                                 e.OldItems.OfType<IChild>().Apply(x => x.Parent = null);
+                                 break;
+                             case NotifyCollectionChangedAction.Reset:
+                                 this._items.OfType<IChild>().Apply(x => x.Parent = this);
+                                 break;
+                         }
+                     };
                 }
 
                 /// <summary>
                 /// Gets the items that are currently being conducted.
                 /// </summary>
-                public IObservableCollection<T> Items
-                {
-                    get { return items; }
-                }
-
-                /// <summary>
-                /// Gets the items that are currently being conducted as a ReactiveList.
-                /// </summary>
-                public ReactiveList<T> ReactiveItems
-                {
-                    get { return items as ReactiveList<T>; }
-                }
+                public ReadOnlyObservableCollection<T> Items { get; }
 
                 /// <summary>
                 /// Gets the children.
@@ -68,7 +91,7 @@ namespace Caliburn.Micro.ReactiveUI
                 /// <returns>The collection of children.</returns>
                 public override IEnumerable<T> GetChildren()
                 {
-                    return items;
+                    return this.Items;
                 }
 
                 /// <summary>
@@ -77,18 +100,18 @@ namespace Caliburn.Micro.ReactiveUI
                 /// <param name="item">The item to activate.</param>
                 public override void ActivateItem(T item)
                 {
-                    if (item != null && item.Equals(ActiveItem))
+                    if (item != null && item.Equals(this.ActiveItem))
                     {
-                        if (IsActive)
+                        if (this.IsActive)
                         {
                             ScreenExtensions.TryActivate(item);
-                            OnActivationProcessed(item, true);
+                            this.OnActivationProcessed(item, true);
                         }
 
                         return;
                     }
 
-                    ChangeActiveItem(item, false);
+                    this.ChangeActiveItem(item, false);
                 }
 
                 /// <summary>
@@ -109,11 +132,11 @@ namespace Caliburn.Micro.ReactiveUI
                     }
                     else
                     {
-                        CloseStrategy.Execute(new[] { item }, (canClose, closable) =>
+                        this.CloseStrategy.Execute(new[] { item }, (canClose, closeable) =>
                         {
                             if (canClose)
                             {
-                                CloseItemCore(item);
+                                this.CloseItemCore(item);
                             }
                         });
                     }
@@ -121,19 +144,19 @@ namespace Caliburn.Micro.ReactiveUI
 
                 void CloseItemCore(T item)
                 {
-                    if (item.Equals(ActiveItem))
+                    if (item.Equals(this.ActiveItem))
                     {
-                        var index = items.IndexOf(item);
-                        var next = DetermineNextItemToActivate(items, index);
+                        var index = this._items.IndexOf(item);
+                        var next = this.DetermineNextItemToActivate(this._items, index);
 
-                        ChangeActiveItem(next, true);
+                        this.ChangeActiveItem(next, true);
                     }
                     else
                     {
                         ScreenExtensions.TryDeactivate(item, true);
                     }
 
-                    items.Remove(item);
+                    this._items.Remove(item);
                 }
 
                 /// <summary>
@@ -166,32 +189,35 @@ namespace Caliburn.Micro.ReactiveUI
                 /// <param name="callback">The implementor calls this action with the result of the close check.</param>
                 public override void CanClose(Action<bool> callback)
                 {
-                    CloseStrategy.Execute(items.ToList(), (canClose, closable) =>
+                    this.CloseStrategy.Execute(this._items.ToList(), (canClose, closeables) =>
                     {
-                        if (!canClose && closable.Any())
+                        if (!canClose && closeables.Any())
                         {
-                            if (closable.Contains(ActiveItem))
+                            if (closeables.Contains(this.ActiveItem))
                             {
-                                var list = items.ToList();
-                                var next = ActiveItem;
+                                var list = this._items.ToList();
+                                var next = this.ActiveItem;
                                 do
                                 {
                                     var previous = next;
-                                    next = DetermineNextItemToActivate(list, list.IndexOf(previous));
+                                    next = this.DetermineNextItemToActivate(list, list.IndexOf(previous));
                                     list.Remove(previous);
-                                } while (closable.Contains(next));
+                                } while (closeables.Contains(next));
 
-                                var previousActive = ActiveItem;
-                                ChangeActiveItem(next, true);
-                                items.Remove(previousActive);
+                                var previousActive = this.ActiveItem;
+                                this.ChangeActiveItem(next, true);
+                                this._items.Remove(previousActive);
 
-                                var stillToClose = closable.ToList();
+                                var stillToClose = closeables.ToList();
                                 stillToClose.Remove(previousActive);
-                                closable = stillToClose;
+                                closeables = stillToClose;
                             }
 
-                            closable.OfType<IDeactivate>().Apply(x => x.Deactivate(true));
-                            items.RemoveRange(closable);
+                            closeables.OfType<IDeactivate>().Apply(x => x.Deactivate(true));
+                            foreach (var closeable in closeables)
+                            {
+                                this._items.Remove(closeable);
+                            }
                         }
 
                         callback(canClose);
@@ -203,7 +229,7 @@ namespace Caliburn.Micro.ReactiveUI
                 /// </summary>
                 protected override void OnActivate()
                 {
-                    ScreenExtensions.TryActivate(ActiveItem);
+                    ScreenExtensions.TryActivate(this.ActiveItem);
                 }
 
                 /// <summary>
@@ -214,12 +240,12 @@ namespace Caliburn.Micro.ReactiveUI
                 {
                     if (close)
                     {
-                        items.OfType<IDeactivate>().Apply(x => x.Deactivate(true));
-                        items.Clear();
+                        this._items.OfType<IDeactivate>().Apply(x => x.Deactivate(true));
+                        this._items.Clear();
                     }
                     else
                     {
-                        ScreenExtensions.TryDeactivate(ActiveItem, false);
+                        ScreenExtensions.TryDeactivate(this.ActiveItem, false);
                     }
                 }
 
@@ -232,15 +258,16 @@ namespace Caliburn.Micro.ReactiveUI
                 {
                     if (newItem == null)
                     {
-                        newItem = DetermineNextItemToActivate(items, ActiveItem != null ? items.IndexOf(ActiveItem) : 0);
+                        newItem = this.DetermineNextItemToActivate(this._items, this.ActiveItem != null ? this._items.IndexOf(this.ActiveItem) : 0);
                     }
                     else
                     {
-                        var index = items.IndexOf(newItem);
+                        var index = this._items.IndexOf(newItem);
 
                         if (index == -1)
-                            items.Add(newItem);
-                        else newItem = items[index];
+                            this._items.Add(newItem);
+                        else
+                            newItem = this._items[index];
                     }
 
                     return base.EnsureItem(newItem);
