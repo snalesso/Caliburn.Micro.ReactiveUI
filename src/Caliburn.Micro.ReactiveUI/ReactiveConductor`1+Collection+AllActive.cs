@@ -1,11 +1,10 @@
-﻿using ReactiveUI;
-using System;
+﻿using Caliburn.Micro;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Reflection;
-using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Caliburn.Micro.ReactiveUI
 {
@@ -17,12 +16,12 @@ namespace Caliburn.Micro.ReactiveUI
         public partial class Collection
         {
             /// <summary>
-            /// An implementation of <see cref="IConductor"/> that holds on to many items wich are all activated.
+            /// An implementation of <see cref="IConductor"/> that holds on to many items which are all activated.
             /// </summary>
-            public class AllActive : ReactiveConductorBase<T>
+            public class AllActive : ConductorBase<T>
             {
-                readonly ObservableCollection<T> _items = new ObservableCollection<T>();
-                readonly bool _openPublicItems;
+                private readonly BindableCollection<T> _items = new BindableCollection<T>();
+                private readonly bool _openPublicItems;
 
                 /// <summary>
                 /// Initializes a new instance of the <see cref="Conductor&lt;T&gt;.Collection.AllActive"/> class.
@@ -39,8 +38,6 @@ namespace Caliburn.Micro.ReactiveUI
                 /// </summary>
                 public AllActive()
                 {
-                    this.Items = new ReadOnlyObservableCollection<T>(this._items);
-
                     this._items.CollectionChanged += (s, e) =>
                     {
                         switch (e.Action)
@@ -65,82 +62,83 @@ namespace Caliburn.Micro.ReactiveUI
                 /// <summary>
                 /// Gets the items that are currently being conducted.
                 /// </summary>
-                public ReadOnlyObservableCollection<T> Items { get; }
+                public IObservableCollection<T> Items => this._items;
 
                 /// <summary>
                 /// Called when activating.
                 /// </summary>
-                protected override void OnActivate()
+                protected override Task OnActivateAsync(CancellationToken cancellationToken)
                 {
-                    this._items.OfType<IActivate>().Apply(x => x.Activate());
+                    return Task.WhenAll(this._items.OfType<IActivate>().Select(x => x.ActivateAsync(cancellationToken)));
                 }
 
                 /// <summary>
                 /// Called when deactivating.
                 /// </summary>
-                /// <param name="close">Inidicates whether this instance will be closed.</param>
-                protected override void OnDeactivate(bool close)
+                /// <param name="close">Indicates whether this instance will be closed.</param>
+                /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+                /// <returns>A task that represents the asynchronous operation.</returns>
+                protected override async Task OnDeactivateAsync(bool close, CancellationToken cancellationToken)
                 {
-                    this._items.OfType<IDeactivate>().Apply(x => x.Deactivate(close));
-                    if (close)
+                    foreach (var deactivate in this._items.OfType<IDeactivate>())
                     {
-                        this._items.Clear();
+                        await deactivate.DeactivateAsync(close, cancellationToken);
                     }
+
+                    if (close)
+                        this._items.Clear();
                 }
 
                 /// <summary>
                 /// Called to check whether or not this instance can close.
                 /// </summary>
-                /// <param name="callback">The implementor calls this action with the result of the close check.</param>
-                public override void CanClose(Action<bool> callback)
+                /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+                /// <returns>A task that represents the asynchronous operation.</returns>
+                public override async Task<bool> CanCloseAsync(CancellationToken cancellationToken = default)
                 {
-                    this.CloseStrategy.Execute(this.Items, (canClose, closeables) =>
+                    var closeResult = await this.CloseStrategy.ExecuteAsync(this._items.ToList(), cancellationToken);
+
+                    if (!closeResult.CloseCanOccur && closeResult.Children.Any())
                     {
-                        if (!canClose && closeables.Any())
+                        foreach (var deactivate in closeResult.Children.OfType<IDeactivate>())
                         {
-                            closeables.OfType<IDeactivate>().Apply(x => x.Deactivate(true));
-                            foreach (var closeable in closeables)
-                            {
-                                this._items.Remove(closeable);
-                            }
+                            await deactivate.DeactivateAsync(true, cancellationToken);
                         }
 
-                        callback(canClose);
-                    });
+                        this._items.RemoveRange(closeResult.Children);
+                    }
+
+                    return closeResult.CloseCanOccur;
                 }
 
                 /// <summary>
                 /// Called when initializing.
                 /// </summary>
-                protected override void OnInitialize()
+                protected override async Task OnInitializeAsync(CancellationToken cancellationToken)
                 {
                     if (this._openPublicItems)
-                    {
-                        this.GetType().GetRuntimeProperties()
+                        await Task.WhenAll(this.GetType().GetRuntimeProperties()
                             .Where(x => x.Name != "Parent" && typeof(T).GetTypeInfo().IsAssignableFrom(x.PropertyType.GetTypeInfo()))
                             .Select(x => x.GetValue(this, null))
                             .Cast<T>()
-                            .Apply(this.ActivateItem);
-                    }
+                            .Select(i => this.ActivateItemAsync(i, cancellationToken)));
                 }
 
                 /// <summary>
                 /// Activates the specified item.
                 /// </summary>
                 /// <param name="item">The item to activate.</param>
-                public override void ActivateItem(T item)
+                /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+                /// <returns>A task that represents the asynchronous operation.</returns>
+                public override async Task ActivateItemAsync(T item, CancellationToken cancellationToken = default)
                 {
                     if (item == null)
-                    {
                         return;
-                    }
 
                     item = this.EnsureItem(item);
 
                     if (this.IsActive)
-                    {
-                        ScreenExtensions.TryActivate(item);
-                    }
+                        await ScreenExtensions.TryActivateAsync(item, cancellationToken);
 
                     this.OnActivationProcessed(item, true);
                 }
@@ -150,25 +148,22 @@ namespace Caliburn.Micro.ReactiveUI
                 /// </summary>
                 /// <param name="item">The item to close.</param>
                 /// <param name="close">Indicates whether or not to close the item after deactivating it.</param>
-                public override void DeactivateItem(T item, bool close)
+                /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+                /// <returns>A task that represents the asynchronous operation.</returns>
+                public override async Task DeactivateItemAsync(T item, bool close, CancellationToken cancellationToken = default)
                 {
                     if (item == null)
-                    {
                         return;
-                    }
 
                     if (close)
                     {
-                        this.CloseStrategy.Execute(new[] { item }, (canClose, closeable) =>
-                        {
-                            if (canClose)
-                                this.CloseItemCore(item);
-                        });
+                        var closeResult = await this.CloseStrategy.ExecuteAsync(new[] { item }, CancellationToken.None);
+
+                        if (closeResult.CloseCanOccur)
+                            await this.CloseItemCoreAsync(item, cancellationToken);
                     }
                     else
-                    {
-                        ScreenExtensions.TryDeactivate(item, false);
-                    }
+                        await ScreenExtensions.TryDeactivateAsync(item, false, cancellationToken);
                 }
 
                 /// <summary>
@@ -180,9 +175,9 @@ namespace Caliburn.Micro.ReactiveUI
                     return this._items;
                 }
 
-                void CloseItemCore(T item)
+                private async Task CloseItemCoreAsync(T item, CancellationToken cancellationToken = default)
                 {
-                    ScreenExtensions.TryDeactivate(item, true);
+                    await ScreenExtensions.TryDeactivateAsync(item, true, cancellationToken);
                     this._items.Remove(item);
                 }
 
@@ -196,13 +191,9 @@ namespace Caliburn.Micro.ReactiveUI
                     var index = this._items.IndexOf(newItem);
 
                     if (index == -1)
-                    {
                         this._items.Add(newItem);
-                    }
                     else
-                    {
                         newItem = this._items[index];
-                    }
 
                     return base.EnsureItem(newItem);
                 }

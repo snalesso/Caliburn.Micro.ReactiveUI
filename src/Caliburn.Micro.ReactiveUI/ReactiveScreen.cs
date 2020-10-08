@@ -1,49 +1,64 @@
 ﻿using ReactiveUI;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Caliburn.Micro.ReactiveUI
 {
-    /// <summary>
-    /// A base implementation of <see cref = "IScreen" />.
-    /// </summary>
-    public class ReactiveScreen : ReactiveViewAware, IScreen, IChild
+    public class ReactiveScreen : ReactiveViewAware, Caliburn.Micro.IScreen, IChild
     {
-        static readonly ILog Log = LogManager.GetLog(typeof(ReactiveScreen));
+        private static readonly ILog Log = LogManager.GetLog(typeof(Screen));
+        private string _displayName;
 
-        bool isActive;
-        bool isInitialized;
-        object parent;
-        string displayName;
+        private bool _isActive;
+        private bool _isInitialized;
+        private object _parent;
 
         /// <summary>
-        /// Creates an instance of <see cref="ReactiveScreen"/>.
+        /// Creates an instance of the screen.
         /// </summary>
         public ReactiveScreen()
         {
-            this.displayName = this.GetType().FullName;
+            this._displayName = this.GetType().FullName;
         }
 
         /// <summary>
-        /// Gets or Sets the Parent <see cref = "IConductor" />.
+        /// Indicates whether or not this instance is currently initialized.
+        /// Virtualized in order to help with document oriented view models.
         /// </summary>
-        public virtual object Parent
+        public virtual bool IsInitialized
         {
-            get { return this.parent; }
-            set
+            get => this._isInitialized;
+            private set
             {
-                this.RaiseAndSetIfChanged(ref this.parent, value);
+                this._isInitialized = value;
+                this.RaisePropertyChanged();
             }
         }
 
         /// <summary>
-        /// Gets or Sets the Display Name.
+        /// Gets or Sets the Parent <see cref = "IConductor" />
+        /// </summary>
+        public virtual object Parent
+        {
+            get => this._parent;
+            set
+            {
+                this._parent = value;
+                this.RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Gets or Sets the Display Name
         /// </summary>
         public virtual string DisplayName
         {
-            get { return this.displayName; }
+            get => this._displayName;
             set
             {
-                this.RaiseAndSetIfChanged(ref this.displayName, value);
+                this._displayName = value;
+                this.RaisePropertyChanged();
             }
         }
 
@@ -53,23 +68,11 @@ namespace Caliburn.Micro.ReactiveUI
         /// </summary>
         public virtual bool IsActive
         {
-            get { return this.isActive; }
+            get => this._isActive;
             private set
             {
-                this.RaiseAndSetIfChanged(ref this.isActive, value);
-            }
-        }
-
-        /// <summary>
-        /// Indicates whether or not this instance is currently initialized.
-        /// Virtualized in order to help with document oriented view models.
-        /// </summary>
-        public virtual bool IsInitialized
-        {
-            get { return this.isInitialized; }
-            private set
-            {
-                this.RaiseAndSetIfChanged(ref this.isInitialized, value);
+                this._isActive = value;
+                this.RaisePropertyChanged();
             }
         }
 
@@ -88,70 +91,46 @@ namespace Caliburn.Micro.ReactiveUI
         /// </summary>
         public virtual event EventHandler<DeactivationEventArgs> Deactivated = delegate { };
 
-        void IActivate.Activate()
+        async Task IActivate.ActivateAsync(CancellationToken cancellationToken)
         {
             if (this.IsActive)
-            {
                 return;
-            }
 
             var initialized = false;
 
             if (!this.IsInitialized)
             {
+                await this.OnInitializeAsync(cancellationToken);
                 this.IsInitialized = initialized = true;
-                this.OnInitialize();
             }
 
-            this.IsActive = true;
             Log.Info("Activating {0}.", this);
-            this.OnActivate();
+            await this.OnActivateAsync(cancellationToken);
+            this.IsActive = true;
 
-            var handler = Activated;
-            if (handler != null)
+            Activated?.Invoke(this, new ActivationEventArgs
             {
-                handler(this, new ActivationEventArgs
-                {
-                    WasInitialized = initialized
-                });
-            }
+                WasInitialized = initialized
+            });
         }
 
-        /// <summary>
-        /// Called when initializing.
-        /// </summary>
-        protected virtual void OnInitialize() { }
-
-        /// <summary>
-        /// Called when activating.
-        /// </summary>
-        protected virtual void OnActivate() { }
-
-        void IDeactivate.Deactivate(bool close)
+        async Task IDeactivate.DeactivateAsync(bool close, CancellationToken cancellationToken)
         {
-            if (this.IsActive || (this.IsInitialized && close))
+            if (this.IsActive || this.IsInitialized && close)
             {
-                var attemptingDeactivationHandler = AttemptingDeactivation;
-                if (attemptingDeactivationHandler != null)
+                AttemptingDeactivation?.Invoke(this, new DeactivationEventArgs
                 {
-                    attemptingDeactivationHandler(this, new DeactivationEventArgs
-                    {
-                        WasClosed = close
-                    });
-                }
+                    WasClosed = close
+                });
 
-                this.IsActive = false;
                 Log.Info("Deactivating {0}.", this);
-                this.OnDeactivate(close);
+                await this.OnDeactivateAsync(close, cancellationToken);
+                this.IsActive = false;
 
-                var deactivatedHandler = Deactivated;
-                if (deactivatedHandler != null)
+                this.Deactivated?.Invoke(this, new DeactivationEventArgs
                 {
-                    deactivatedHandler(this, new DeactivationEventArgs
-                    {
-                        WasClosed = close
-                    });
-                }
+                    WasClosed = close
+                });
 
                 if (close)
                 {
@@ -162,18 +141,13 @@ namespace Caliburn.Micro.ReactiveUI
         }
 
         /// <summary>
-        /// Called when deactivating.
-        /// </summary>
-        /// <param name="close">Inidicates whether this instance will be closed.</param>
-        protected virtual void OnDeactivate(bool close) { }
-
-        /// <summary>
         /// Called to check whether or not this instance can close.
         /// </summary>
-        /// <param name="callback">The implementor calls this action with the result of the close check.</param>
-        public virtual void CanClose(Action<bool> callback)
+        /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+        /// <returns>A task that represents the asynchronous operation and holds the value of the close check..</returns>
+        public virtual Task<bool> CanCloseAsync(CancellationToken cancellationToken = default)
         {
-            callback(true);
+            return Task.FromResult(true);
         }
 
         /// <summary>
@@ -181,9 +155,43 @@ namespace Caliburn.Micro.ReactiveUI
         /// Also provides an opportunity to pass a dialog result to it's corresponding view.
         /// </summary>
         /// <param name="dialogResult">The dialog result.</param>
-        public virtual void TryClose(bool? dialogResult = null)
+        public virtual async Task TryCloseAsync(bool? dialogResult = null)
         {
-            PlatformProvider.Current.GetViewCloseAction(this, this.Views.Values, dialogResult).OnUIThread();
+            if (this.Parent is IConductor conductor)
+            {
+                await conductor.CloseItemAsync(this, CancellationToken.None);
+            }
+
+            var closeAction = PlatformProvider.Current.GetViewCloseAction(this, this.Views.Values, dialogResult);
+
+            await Execute.OnUIThreadAsync(async () => await closeAction(CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Called when initializing.
+        /// </summary>
+        protected virtual Task OnInitializeAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(true);
+        }
+
+        /// <summary>
+        /// Called when activating.
+        /// </summary>
+        protected virtual Task OnActivateAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(true);
+        }
+
+        /// <summary>
+        /// Called when deactivating.
+        /// </summary>
+        /// <param name = "close">Indicates whether this instance will be closed.</param>
+        /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        protected virtual Task OnDeactivateAsync(bool close, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(true);
         }
     }
 }

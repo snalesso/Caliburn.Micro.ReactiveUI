@@ -1,11 +1,12 @@
-﻿using System;
+﻿using Caliburn.Micro;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Caliburn.Micro.ReactiveUI
 {
-
     /// <summary>
     /// A dictionary in which the values are weak references.
     /// </summary>
@@ -142,9 +143,10 @@ namespace Caliburn.Micro.ReactiveUI
 
         bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
         {
-            TValue value;
-            if (!this.TryGetValue(item.Key, out value))
+            if (!this.TryGetValue(item.Key, out TValue value))
+            {
                 return false;
+            }
 
             return value == item.Value;
         }
@@ -152,23 +154,36 @@ namespace Caliburn.Micro.ReactiveUI
         void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
         {
             if (array == null)
+            {
                 throw new ArgumentNullException("array");
+            }
+
             if (arrayIndex < 0 || arrayIndex >= array.Length)
+            {
                 throw new ArgumentOutOfRangeException("arrayIndex");
+            }
+
             if ((arrayIndex + this.Count) > array.Length)
+            {
                 throw new ArgumentException(
                     "The number of elements in the source collection is greater than the available space from arrayIndex to the end of the destination array.");
+            }
 
             this.ToArray().CopyTo(array, arrayIndex);
         }
 
         bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item)
         {
-            TValue value;
-            if (!this.TryGetValue(item.Key, out value))
+            if (!this.TryGetValue(item.Key, out TValue value))
+            {
                 return false;
+            }
+
             if (value != item.Value)
+            {
                 return false;
+            }
+
             return this.inner.Remove(item.Key);
         }
 
@@ -212,8 +227,7 @@ namespace Caliburn.Micro.ReactiveUI
         /// <returns></returns>
         public bool ContainsKey(TKey key)
         {
-            TValue dummy;
-            return this.TryGetValue(key, out dummy);
+            return this.TryGetValue(key, out _);
         }
 
         /// <summary>
@@ -240,8 +254,7 @@ namespace Caliburn.Micro.ReactiveUI
         {
             this.CleanIfNeeded();
 
-            WeakReference wr;
-            if (!this.inner.TryGetValue(key, out wr))
+            if (!this.inner.TryGetValue(key, out WeakReference wr))
             {
                 value = null;
                 return false;
@@ -271,9 +284,11 @@ namespace Caliburn.Micro.ReactiveUI
         {
             get
             {
-                TValue result;
-                if (!this.TryGetValue(key, out result))
+                if (!this.TryGetValue(key, out TValue result))
+                {
                     throw new KeyNotFoundException();
+                }
+
                 return result;
             }
             set
@@ -338,12 +353,20 @@ namespace Caliburn.Micro.ReactiveUI
             public void CopyTo(TValue[] array, int arrayIndex)
             {
                 if (array == null)
+                {
                     throw new ArgumentNullException("array");
+                }
+
                 if (arrayIndex < 0 || arrayIndex >= array.Length)
+                {
                     throw new ArgumentOutOfRangeException("arrayIndex");
+                }
+
                 if ((arrayIndex + this.Count) > array.Length)
+                {
                     throw new ArgumentException(
                         "The number of elements in the source collection is greater than the available space from arrayIndex to the end of the destination array.");
+                }
 
                 this.ToArray().CopyTo(array, arrayIndex);
             }

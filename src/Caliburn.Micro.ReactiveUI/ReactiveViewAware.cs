@@ -1,15 +1,12 @@
-﻿using System;
+﻿using Caliburn.Micro;
+using System;
 using System.Collections.Generic;
-
 
 namespace Caliburn.Micro.ReactiveUI
 {
-    ///<summary>
-    ///  A base implementation of <see cref = "IViewAware" /> which is capable of caching views by context.
-    ///</summary>
-    public class ReactiveViewAware : ReactivePropertyChangedBase, IViewAware
+    public class ReactiveViewAware : ReactiveObjectEx, Caliburn.Micro.IViewAware
     {
-        readonly IDictionary<object, object> views;
+        private readonly IDictionary<object, object> views;
 
         /// <summary>
         /// The default view context.
@@ -17,20 +14,23 @@ namespace Caliburn.Micro.ReactiveUI
         public static readonly object DefaultContext = new object();
 
         /// <summary>
-        /// The view cache for this instance.
+        /// The view chache for this instance.
         /// </summary>
-        protected readonly IDictionary<object, object> Views = new Dictionary<object, object>();
+        protected IDictionary<object, object> Views
+        {
+            get { return this.views; }
+        }
 
-        ///<summary>
+        /// <summary>
         /// Creates an instance of <see cref="ReactiveViewAware"/>.
-        ///</summary>
+        /// </summary>
         public ReactiveViewAware()
         {
             this.views = new WeakValueDictionary<object, object>();
         }
 
         /// <summary>
-        ///   Raised when a view is attached.
+        /// Raised when a view is attached.
         /// </summary>
         public event EventHandler<ViewAttachedEventArgs> ViewAttached = delegate { };
 
@@ -41,10 +41,10 @@ namespace Caliburn.Micro.ReactiveUI
             var nonGeneratedView = PlatformProvider.Current.GetFirstNonGeneratedView(view);
             PlatformProvider.Current.ExecuteOnFirstLoad(nonGeneratedView, this.OnViewLoaded);
             this.OnViewAttached(nonGeneratedView, context);
-            ViewAttached(this, new ViewAttachedEventArgs { View = nonGeneratedView, Context = context });
 
-            var activatable = this as IActivate;
-            if (activatable == null || activatable.IsActive)
+            this.ViewAttached(this, new ViewAttachedEventArgs { View = nonGeneratedView, Context = context });
+
+            if (!(this is IActivate activatable) || activatable.IsActive)
             {
                 PlatformProvider.Current.ExecuteOnLayoutUpdated(nonGeneratedView, this.OnViewReady);
             }
@@ -54,11 +54,11 @@ namespace Caliburn.Micro.ReactiveUI
             }
         }
 
-        static void AttachViewReadyOnActivated(IActivate activatable, object nonGeneratedView)
+        private static void AttachViewReadyOnActivated(IActivate activatable, object nonGeneratedView)
         {
             var viewReference = new WeakReference(nonGeneratedView);
-            EventHandler<ActivationEventArgs> handler = null;
-            handler = (s, e) =>
+
+            void handler(object s, ActivationEventArgs e)
             {
                 ((IActivate)s).Activated -= handler;
                 var view = viewReference.Target;
@@ -66,7 +66,8 @@ namespace Caliburn.Micro.ReactiveUI
                 {
                     PlatformProvider.Current.ExecuteOnLayoutUpdated(view, ((ReactiveViewAware)s).OnViewReady);
                 }
-            };
+            }
+
             activatable.Activated += handler;
         }
 
@@ -80,7 +81,7 @@ namespace Caliburn.Micro.ReactiveUI
         }
 
         /// <summary>
-        ///   Called when an attached view's Loaded event fires.
+        /// Called when an attached view's Loaded event fires.
         /// </summary>
         /// <param name = "view"></param>
         protected virtual void OnViewLoaded(object view)
@@ -88,7 +89,7 @@ namespace Caliburn.Micro.ReactiveUI
         }
 
         /// <summary>
-        ///   Called the first time the page's LayoutUpdated event fires after it is navigated to.
+        /// Called the first time the page's LayoutUpdated event fires after it is navigated to.
         /// </summary>
         /// <param name = "view"></param>
         protected virtual void OnViewReady(object view)
@@ -96,14 +97,13 @@ namespace Caliburn.Micro.ReactiveUI
         }
 
         /// <summary>
-        ///   Gets a view previously attached to this instance.
+        /// Gets a view previously attached to this instance.
         /// </summary>
         /// <param name = "context">The context denoting which view to retrieve.</param>
         /// <returns>The view.</returns>
         public virtual object GetView(object context = null)
         {
-            object view;
-            this.Views.TryGetValue(context ?? DefaultContext, out view);
+            this.Views.TryGetValue(context ?? DefaultContext, out var view);
             return view;
         }
     }

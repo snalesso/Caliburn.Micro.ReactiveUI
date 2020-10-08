@@ -1,8 +1,10 @@
-﻿using System;
+﻿using Caliburn.Micro;
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Caliburn.Micro.ReactiveUI
 {
@@ -12,7 +14,7 @@ namespace Caliburn.Micro.ReactiveUI
     /// <typeparam name="T">The type that is being conducted.</typeparam>
     public abstract class ReactiveConductorBase<T> : ReactiveScreen, IConductor, IParent<T> where T : class
     {
-        ICloseStrategy<T> closeStrategy;
+        private ICloseStrategy<T> _closeStrategy;
 
         /// <summary>
         /// Gets or sets the close strategy.
@@ -20,18 +22,13 @@ namespace Caliburn.Micro.ReactiveUI
         /// <value>The close strategy.</value>
         public ICloseStrategy<T> CloseStrategy
         {
-            get { return this.closeStrategy ?? (this.closeStrategy = new DefaultCloseStrategy<T>()); }
-            set { this.closeStrategy = value; }
+            get => this._closeStrategy ??= new DefaultCloseStrategy<T>();
+            set => this._closeStrategy = value;
         }
 
-        void IConductor.ActivateItem(object item)
+        Task IConductor.DeactivateItemAsync(object item, bool close, CancellationToken cancellationToken)
         {
-            this.ActivateItem((T)item);
-        }
-
-        void IConductor.DeactivateItem(object item, bool close)
-        {
-            this.DeactivateItem((T)item, close);
+            return this.DeactivateItemAsync((T)item, close, cancellationToken);
         }
 
         IEnumerable IParent.GetChildren()
@@ -50,18 +47,27 @@ namespace Caliburn.Micro.ReactiveUI
         /// <returns>The collection of children.</returns>
         public abstract IEnumerable<T> GetChildren();
 
+        Task IConductor.ActivateItemAsync(object item, CancellationToken cancellationToken)
+        {
+            return this.ActivateItemAsync((T)item, cancellationToken);
+        }
+
         /// <summary>
         /// Activates the specified item.
         /// </summary>
         /// <param name="item">The item to activate.</param>
-        public abstract void ActivateItem(T item);
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        public abstract Task ActivateItemAsync(T item, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Deactivates the specified item.
         /// </summary>
         /// <param name="item">The item to close.</param>
         /// <param name="close">Indicates whether or not to close the item after deactivating it.</param>
-        public abstract void DeactivateItem(T item, bool close);
+        /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        public abstract Task DeactivateItemAsync(T item, bool close, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Called by a subclass when an activation needs processing.
@@ -71,19 +77,13 @@ namespace Caliburn.Micro.ReactiveUI
         protected virtual void OnActivationProcessed(T item, bool success)
         {
             if (item == null)
-            {
                 return;
-            }
 
-            var handler = ActivationProcessed;
-            if (handler != null)
+            ActivationProcessed?.Invoke(this, new ActivationProcessedEventArgs
             {
-                handler(this, new ActivationProcessedEventArgs
-                {
-                    Item = item,
-                    Success = success
-                });
-            }
+                Item = item,
+                Success = success
+            });
         }
 
         /// <summary>
@@ -93,8 +93,7 @@ namespace Caliburn.Micro.ReactiveUI
         /// <returns>The item to be activated.</returns>
         protected virtual T EnsureItem(T newItem)
         {
-            var node = newItem as IChild;
-            if (node != null && node.Parent != this)
+            if (newItem is IChild node && node.Parent != this)
                 node.Parent = this;
 
             return newItem;
