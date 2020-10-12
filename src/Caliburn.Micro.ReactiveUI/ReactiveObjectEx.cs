@@ -4,55 +4,38 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace Caliburn.Micro.ReactiveUI
 {
     public class ReactiveObjectEx : ReactiveObject, INotifyPropertyChangedEx
     {
         /// <summary>
-        /// Creates an instance of <see cref = "PropertyChangedBase" />.
-        /// </summary>
-        public ReactiveObjectEx()
-        {
-            this.IsNotifying = true;
-        }
-
-        /// <summary>
-        /// Occurs when a property value changes.
-        /// </summary>
-        public virtual new event PropertyChangedEventHandler PropertyChanged;
-
-        /// <summary>
         /// Enables/Disables property change notification.
         /// Virtualized in order to help with document oriented view models.
         /// </summary>
-        public virtual bool IsNotifying { get; set; }
+        [Obsolete("Use ReactiveUI's SuppressNotifications")]
+        public virtual bool IsNotifying
+        {
+            get => this.AreChangeNotificationsEnabled();
+            set => throw new NotSupportedException();
+        }
 
         /// <summary>
         /// Raises a change notification indicating that all bindings should be refreshed.
         /// </summary>
         public virtual void Refresh()
         {
-            this.NotifyOfPropertyChange(string.Empty);
+            this.RaisePropertyChanged(string.Empty);
         }
 
         /// <summary>
         /// Notifies subscribers of the property change.
         /// </summary>
         /// <param name = "propertyName">Name of the property.</param>
-        public virtual void NotifyOfPropertyChange([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
+        public virtual void NotifyOfPropertyChange([CallerMemberName] string propertyName = null)
         {
-            if (this.IsNotifying && PropertyChanged != null)
-            {
-                if (PlatformProvider.Current.PropertyChangeNotificationsOnUIThread)
-                {
-                    this.OnUIThread(() => this.OnPropertyChanged(new PropertyChangedEventArgs(propertyName)));
-                }
-                else
-                {
-                    this.OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
-                }
-            }
+            this.RaisePropertyChanged(propertyName);
         }
 
         /// <summary>
@@ -62,46 +45,25 @@ namespace Caliburn.Micro.ReactiveUI
         /// <param name = "property">The property expression.</param>
         public void NotifyOfPropertyChange<TProperty>(Expression<Func<TProperty>> property)
         {
-            this.NotifyOfPropertyChange(global::ReactiveUI.ExpressionMixins.GetMemberInfo(property).Name);
+            this.RaisePropertyChanged(property.GetMemberInfo().Name);
         }
 
-        /// <summary>
-        /// Raises the <see cref="PropertyChanged" /> event directly.
-        /// </summary>
-        /// <param name="e">The <see cref="PropertyChangedEventArgs"/> instance containing the event data.</param>
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        protected void OnPropertyChanged(PropertyChangedEventArgs e)
+        public bool Set<T>(ref T oldValue, T newValue, [CallerMemberName] string propertyName = null)
         {
-            PropertyChanged?.Invoke(this, e);
+            var changed = EqualityComparer<T>.Default.Equals(oldValue, newValue);
+
+            this.RaiseAndSetIfChanged(ref oldValue, newValue, propertyName);
+
+            return changed;
         }
 
-        /// <summary>
-        /// Executes the given action on the UI thread
-        /// </summary>
-        /// <remarks>An extension point for subclasses to customise how property change notifications are handled.</remarks>
-        /// <param name="action"></param>
-        protected virtual void OnUIThread(System.Action action) => action.OnUIThread();
-
-        /// <summary>
-        /// Sets a backing field value and if it's changed raise a notification.
-        /// </summary>
-        /// <typeparam name="T">The type of the value being set.</typeparam>
-        /// <param name="oldValue">A reference to the field to update.</param>
-        /// <param name="newValue">The new value.</param>
-        /// <param name="propertyName">The name of the property for change notifications.</param>
-        /// <returns></returns>
-        public virtual bool Set<T>(ref T oldValue, T newValue, [System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
+        public bool SetAndNotify<T>(ref T oldValue, T newValue, [CallerMemberName] string propertyName = null)
         {
-            if (EqualityComparer<T>.Default.Equals(oldValue, newValue))
-            {
-                return false;
-            }
+            var changed = EqualityComparer<T>.Default.Equals(oldValue, newValue);
 
-            oldValue = newValue;
+            this.RaiseAndSetIfChanged(ref oldValue, newValue, propertyName);
 
-            this.NotifyOfPropertyChange(propertyName ?? string.Empty);
-
-            return true;
+            return changed;
         }
     }
 }

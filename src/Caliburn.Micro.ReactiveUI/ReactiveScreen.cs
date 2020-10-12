@@ -7,7 +7,7 @@ namespace Caliburn.Micro.ReactiveUI
 {
     public class ReactiveScreen : ReactiveViewAware, Caliburn.Micro.IScreen, IChild
     {
-        private static readonly ILog Log = LogManager.GetLog(typeof(Screen));
+        private static readonly ILog Log = LogManager.GetLog(typeof(ReactiveScreen));
         private string _displayName;
 
         private bool _isActive;

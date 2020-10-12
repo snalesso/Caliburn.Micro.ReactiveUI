@@ -18,13 +18,13 @@ namespace Caliburn.Micro.ReactiveUI
             /// <summary>
             /// An implementation of <see cref="IConductor"/> that holds on to many items which are all activated.
             /// </summary>
-            public class AllActive : ConductorBase<T>
+            public class AllActive : ReactiveConductorBase<T>
             {
                 private readonly BindableCollection<T> _items = new BindableCollection<T>();
                 private readonly bool _openPublicItems;
 
                 /// <summary>
-                /// Initializes a new instance of the <see cref="Conductor&lt;T&gt;.Collection.AllActive"/> class.
+                /// Initializes a new instance of the <see cref="ReactiveConductor&lt;T&gt;.Collection.AllActive"/> class.
                 /// </summary>
                 /// <param name="openPublicItems">if set to <c>true</c> opens public items that are properties of this class.</param>
                 public AllActive(bool openPublicItems)
@@ -34,7 +34,7 @@ namespace Caliburn.Micro.ReactiveUI
                 }
 
                 /// <summary>
-                /// Initializes a new instance of the <see cref="Conductor&lt;T&gt;.Collection.AllActive"/> class.
+                /// Initializes a new instance of the <see cref="ReactiveConductor&lt;T&gt;.Collection.AllActive"/> class.
                 /// </summary>
                 public AllActive()
                 {

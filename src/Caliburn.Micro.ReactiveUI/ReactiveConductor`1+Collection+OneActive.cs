@@ -24,7 +24,7 @@ namespace Caliburn.Micro.ReactiveUI
                 private readonly BindableCollection<T> _items = new BindableCollection<T>();
 
                 /// <summary>
-                /// Initializes a new instance of the <see cref="Conductor&lt;T&gt;.Collection.OneActive"/> class.
+                /// Initializes a new instance of the <see cref="ReactiveConductor&lt;T&gt;.Collection.OneActive"/> class.
                 /// </summary>
                 public OneActive()
                 {
